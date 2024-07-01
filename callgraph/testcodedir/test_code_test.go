@@ -9,16 +9,23 @@ const globalStr = "Hello, World!"
 
 func mainx() {
 	fmt.Println(globalStr)
-	abc := &Abc{}
+	abc := &AbcValueRecv{}
 	CallInterfaceFunc(abc)
 }
 
-type Abc struct {
+type AbcValueRecv struct {
 	Name string
 }
 
-func (abc Abc) MemberFunc() {
+func (abc AbcValueRecv) MemberFunc() {
 	GlobalFunc()
+}
+
+type AbcPointerRecv struct {
+}
+
+func (abc *AbcPointerRecv) MemberFunc() {
+
 }
 
 func CallInterfaceFunc(abc AbcInterface) {
