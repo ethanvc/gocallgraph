@@ -13,12 +13,14 @@ type DatabaseBuilder struct {
 	IncludeTestFiles bool
 	interfaces       map[*types.Named]*types.Interface
 	structs          map[*types.Named]*types.Struct
+	funcs            map[*types.Func]struct{}
 }
 
 func NewDatabaseBuilder() *DatabaseBuilder {
 	return &DatabaseBuilder{
 		interfaces: make(map[*types.Named]*types.Interface),
 		structs:    make(map[*types.Named]*types.Struct),
+		funcs:      make(map[*types.Func]struct{}),
 	}
 }
 
@@ -59,6 +61,9 @@ func (b *DatabaseBuilder) parseAllInterfaces(prog *ssa.Program) {
 			if b.parseMemberAsInterface(mem) {
 				continue
 			}
+			if b.parseMemberAsFunc(mem) {
+				continue
+			}
 			b.parseMemberAsStruct(mem)
 		}
 	}
@@ -87,13 +92,70 @@ func (b *DatabaseBuilder) parseMemberAsStruct(mem ssa.Member) bool {
 		return false
 	}
 	b.structs[namedType] = ssaStruct
+	for i := 0; i < namedType.NumMethods(); i++ {
+		b.funcs[namedType.Method(i)] = struct{}{}
+	}
 	return true
+}
+
+func (b *DatabaseBuilder) parseMemberAsFunc(mem ssa.Member) bool {
+	if !strings.Contains(mem.Package().String(), "testcodedir") {
+		return false
+	}
+	ssaFunc, _ := mem.(*ssa.Function)
+	if ssaFunc == nil {
+		return false
+	}
+	typesFunc, _ := ssaFunc.Object().(*types.Func)
+	if typesFunc == nil {
+		return false
+	}
+	b.funcs[typesFunc] = struct{}{}
+	return true
+}
+
+func (b *DatabaseBuilder) findInterfaces(name string) []string {
+	var result []string
+	for k, _ := range b.interfaces {
+		if strings.Contains(k.String(), name) {
+			result = append(result, k.String())
+		}
+	}
+	return result
+}
+
+func (b *DatabaseBuilder) getInterface(name string) (*types.Named, *types.Interface) {
+	for k, v := range b.interfaces {
+		if k.String() == name {
+			return k, v
+		}
+	}
+	return nil, nil
 }
 
 func (b *DatabaseBuilder) findStructs(structName string) []string {
 	var result []string
 	for k, _ := range b.structs {
 		if strings.Contains(k.String(), structName) {
+			result = append(result, k.String())
+		}
+	}
+	return result
+}
+
+func (b *DatabaseBuilder) getStruct(name string) (*types.Named, *types.Struct) {
+	for k, v := range b.structs {
+		if k.String() == name {
+			return k, v
+		}
+	}
+	return nil, nil
+}
+
+func (b *DatabaseBuilder) findFuncs(name string) []string {
+	var result []string
+	for k, _ := range b.funcs {
+		if strings.Contains(k.String(), name) {
 			result = append(result, k.String())
 		}
 	}
