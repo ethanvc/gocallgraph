@@ -11,4 +11,6 @@ func TestNewDatabaseBuilder(t *testing.T) {
 	b.IncludeTestFiles = true
 	err := b.Build()
 	require.NoError(t, err)
+	structs := b.findStructs("testcodedir")
+	require.Len(t, structs, 1)
 }

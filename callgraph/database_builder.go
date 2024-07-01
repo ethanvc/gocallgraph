@@ -5,17 +5,20 @@ import (
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/ssa"
 	"golang.org/x/tools/go/ssa/ssautil"
+	"strings"
 )
 
 type DatabaseBuilder struct {
 	Dir              string
 	IncludeTestFiles bool
-	interfaces       map[string]*types.Interface
+	interfaces       map[*types.Named]*types.Interface
+	structs          map[*types.Named]*types.Struct
 }
 
 func NewDatabaseBuilder() *DatabaseBuilder {
 	return &DatabaseBuilder{
-		interfaces: make(map[string]*types.Interface),
+		interfaces: make(map[*types.Named]*types.Interface),
+		structs:    make(map[*types.Named]*types.Struct),
 	}
 }
 
@@ -53,11 +56,46 @@ func (b *DatabaseBuilder) buildProgram() (*ssa.Program, error) {
 func (b *DatabaseBuilder) parseAllInterfaces(prog *ssa.Program) {
 	for _, pkg := range prog.AllPackages() {
 		for _, mem := range pkg.Members {
-			namedType := mem.Type()
-			ssaIf, _ := namedType.Underlying().(*types.Interface)
-			if ssaIf != nil {
-				b.interfaces[namedType.String()] = ssaIf
+			if b.parseMemberAsInterface(mem) {
+				continue
 			}
+			b.parseMemberAsStruct(mem)
 		}
 	}
+}
+
+func (b *DatabaseBuilder) parseMemberAsInterface(mem ssa.Member) bool {
+	namedType, _ := mem.Type().(*types.Named)
+	if namedType == nil {
+		return false
+	}
+	ssaIf, _ := namedType.Underlying().(*types.Interface)
+	if ssaIf == nil {
+		return false
+	}
+	b.interfaces[namedType] = ssaIf
+	return true
+}
+
+func (b *DatabaseBuilder) parseMemberAsStruct(mem ssa.Member) bool {
+	namedType, _ := mem.Type().(*types.Named)
+	if namedType == nil {
+		return false
+	}
+	ssaStruct, _ := namedType.Underlying().(*types.Struct)
+	if ssaStruct == nil {
+		return false
+	}
+	b.structs[namedType] = ssaStruct
+	return true
+}
+
+func (b *DatabaseBuilder) findStructs(structName string) []string {
+	var result []string
+	for k, _ := range b.structs {
+		if strings.Contains(k.String(), structName) {
+			result = append(result, k.String())
+		}
+	}
+	return result
 }
