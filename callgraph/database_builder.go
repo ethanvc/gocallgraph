@@ -2,6 +2,8 @@ package callgraph
 
 import (
 	"go/types"
+	"golang.org/x/tools/go/callgraph"
+	"golang.org/x/tools/go/callgraph/vta"
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/ssa"
 	"golang.org/x/tools/go/ssa/ssautil"
@@ -14,6 +16,7 @@ type DatabaseBuilder struct {
 	interfaces       map[*types.Named]*types.Interface
 	structs          map[*types.Named]*types.Struct
 	funcs            map[*types.Func]struct{}
+	graph            *callgraph.Graph
 }
 
 func NewDatabaseBuilder() *DatabaseBuilder {
@@ -30,6 +33,8 @@ func (b *DatabaseBuilder) Build() error {
 		return err
 	}
 	b.parseAllInterfaces(prog)
+	allFuncs := ssautil.AllFunctions(prog)
+	b.graph = vta.CallGraph(allFuncs, nil)
 	return nil
 }
 
