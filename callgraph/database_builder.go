@@ -3,6 +3,7 @@ package callgraph
 import (
 	"go/types"
 	"golang.org/x/tools/go/callgraph"
+	"golang.org/x/tools/go/callgraph/cha"
 	"golang.org/x/tools/go/callgraph/vta"
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/ssa"
@@ -34,7 +35,8 @@ func (b *DatabaseBuilder) Build() error {
 	}
 	b.parseAllInterfaces(prog)
 	allFuncs := ssautil.AllFunctions(prog)
-	b.graph = vta.CallGraph(allFuncs, nil)
+	b.graph = vta.CallGraph(allFuncs, cha.CallGraph(prog))
+	b.graph.DeleteSyntheticNodes()
 	return nil
 }
 
