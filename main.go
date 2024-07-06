@@ -9,6 +9,7 @@ import (
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/ssa"
 	"golang.org/x/tools/go/ssa/ssautil"
+	"slices"
 	"strings"
 )
 
@@ -39,49 +40,50 @@ func realMain() error {
 
 	cg := vta.CallGraph(ssautil.AllFunctions(prog), cha.CallGraph(prog))
 	cg.DeleteSyntheticNodes()
-	v := &visitor{
-		calleeFunc: "WriteString",
-		rootFunc:   "gocallgraph",
-	}
+	v := newVisitor()
+	v.CalleeFunc = "initPos"
 	callgraph.GraphVisitEdges(cg, v.Visit)
 	return nil
 }
 
 type visitor struct {
-	calleeFunc string
-	rootFunc   string
+	CalleeFunc   string
+	currentStack []*callgraph.Node
+	visitedNode  map[*callgraph.Node]struct{}
+	result       [][]*callgraph.Node
+}
+
+func newVisitor() *visitor {
+	return &visitor{
+		visitedNode: make(map[*callgraph.Node]struct{}),
+	}
 }
 
 func (v *visitor) Visit(edge *callgraph.Edge) error {
 	name := edge.Callee.Func.String()
-	if strings.Contains(name, v.calleeFunc) {
+	if strings.Contains(name, v.CalleeFunc) {
 		v.findRoot(edge.Callee)
+		return errors.New("FoundAndParsed")
 	}
 	return nil
 }
 
-func (v *visitor) findRoot(callee *callgraph.Node) {
-	processedNode := make(map[*callgraph.Node]struct{})
-	nodeTasks := []*callgraph.Node{callee}
-	var result []*callgraph.Node
-	for len(nodeTasks) > 0 {
-		n := nodeTasks[len(nodeTasks)-1]
-		nodeTasks = nodeTasks[:len(nodeTasks)-1]
-		processedNode[n] = struct{}{}
-		for _, edge := range n.In {
-			parent := edge.Caller
-			if len(parent.In) == 0 {
-				if strings.Contains(parent.Func.String(), v.rootFunc) {
-					result = append(result, parent)
-				}
-				continue
-			}
-			for _, p := range parent.In {
-				if _, ok := processedNode[p.Caller]; !ok {
-					nodeTasks = append(nodeTasks, p.Caller)
-				}
-			}
-		}
+func (v *visitor) findRoot(n *callgraph.Node) {
+	if _, ok := v.visitedNode[n]; ok {
+		v.result = append(v.result, slices.Clone(v.currentStack))
+		return
 	}
-	fmt.Println(result)
+	v.visitedNode[n] = struct{}{}
+	defer delete(v.visitedNode, n)
+	v.currentStack = append(v.currentStack, n)
+	defer func() {
+		v.currentStack = v.currentStack[:len(v.currentStack)-1]
+	}()
+	if len(n.In) == 0 {
+		v.result = append(v.result, slices.Clone(v.currentStack))
+		return
+	}
+	for _, parent := range n.In {
+		v.findRoot(parent.Caller)
+	}
 }
