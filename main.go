@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -62,10 +61,6 @@ func realMain() error {
 
 	fmt.Printf("%s: start visit call graph\n", time.Now().Format(time.RFC3339))
 	callgraph.GraphVisitEdges(cg, v.Visit)
-	fmt.Printf("print stack root for:%s\n", v.focusFunc.Func.Name())
-	for _, stack := range v.result {
-		fmt.Printf("%v\n", stack[len(stack)-1])
-	}
 	return nil
 }
 
@@ -74,8 +69,8 @@ type visitor struct {
 	removeTopRootReg *regexp.Regexp
 	currentStack     []*callgraph.Node
 	visitedNode      map[*callgraph.Node]struct{}
-	result           [][]*callgraph.Node
 	focusFunc        *callgraph.Node
+	f                *os.File
 }
 
 type newVisitorConfig struct {
@@ -88,10 +83,15 @@ func newVisitor(conf *newVisitorConfig) (*visitor, error) {
 	if err != nil {
 		return nil, err
 	}
+	f, err := os.Create("stack_list.log")
+	if err != nil {
+		return nil, err
+	}
 	return &visitor{
 		conf:             conf,
 		removeTopRootReg: removeTopRootReg,
 		visitedNode:      make(map[*callgraph.Node]struct{}),
+		f:                f,
 	}, nil
 }
 
@@ -99,6 +99,7 @@ func (v *visitor) Visit(edge *callgraph.Edge) error {
 	name := edge.Callee.Func.String()
 	if strings.Contains(name, v.conf.CalleeFunc) {
 		v.focusFunc = edge.Callee
+		fmt.Fprintf(v.f, "Focus Func: %s\n", edge.Callee.Func.String())
 		v.findRoot(edge.Callee)
 		return errors.New("FoundAndParsed")
 	}
@@ -110,14 +111,14 @@ func (v *visitor) findRoot(n *callgraph.Node) {
 		if len(v.currentStack) == 1 {
 			return
 		}
-		v.result = append(v.result, slices.Clone(v.currentStack))
+		v.onStackFound(v.currentStack)
 		return
 	}
 	if v.removeTopRootReg.MatchString(n.Func.String()) {
 		if len(v.currentStack) == 1 {
 			return
 		}
-		v.result = append(v.result, slices.Clone(v.currentStack))
+		v.onStackFound(v.currentStack)
 		return
 	}
 	v.visitedNode[n] = struct{}{}
@@ -127,11 +128,18 @@ func (v *visitor) findRoot(n *callgraph.Node) {
 		v.currentStack = v.currentStack[:len(v.currentStack)-1]
 	}()
 	if len(n.In) == 0 {
-		v.result = append(v.result, slices.Clone(v.currentStack))
+		v.onStackFound(v.currentStack)
 		return
 	}
 	for _, parent := range n.In {
 		v.findRoot(parent.Caller)
+	}
+}
+
+func (v *visitor) onStackFound(stack []*callgraph.Node) {
+	fmt.Fprintf(v.f, "\n\nStack Found:\n")
+	for _, n := range stack {
+		fmt.Fprintf(v.f, "%s\n", n.Func.String())
 	}
 }
 
