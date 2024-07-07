@@ -101,10 +101,16 @@ func (v *visitor) Visit(edge *callgraph.Edge) error {
 
 func (v *visitor) findRoot(n *callgraph.Node) {
 	if _, ok := v.visitedNode[n]; ok {
+		if len(v.currentStack) == 1 {
+			return
+		}
 		v.result = append(v.result, slices.Clone(v.currentStack))
 		return
 	}
 	if v.removeTopRootReg.MatchString(n.Func.String()) {
+		if len(v.currentStack) == 1 {
+			return
+		}
 		v.result = append(v.result, slices.Clone(v.currentStack))
 		return
 	}
