@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"golang.org/x/tools/go/callgraph"
 	"golang.org/x/tools/go/callgraph/cha"
@@ -45,6 +46,7 @@ func realMain() error {
 	// Create and build SSA-form program representation.
 	mode := ssa.InstantiateGenerics // instantiate generics by default for soundness
 	prog, _ := ssautil.AllPackages(initial, mode)
+	fmt.Printf("%s: start build program\n", time.Now().Format(time.RFC3339))
 	prog.Build()
 
 	cg := vta.CallGraph(ssautil.AllFunctions(prog), cha.CallGraph(prog))
@@ -57,8 +59,10 @@ func realMain() error {
 	if err != nil {
 		return err
 	}
+
+	fmt.Printf("%s: start visit call graph\n", time.Now().Format(time.RFC3339))
 	callgraph.GraphVisitEdges(cg, v.Visit)
-	fmt.Printf("print stack root:\n")
+	fmt.Printf("print stack root for:%s\n", v.focusFunc.Func.Name())
 	for _, stack := range v.result {
 		fmt.Printf("%v\n", stack[len(stack)-1])
 	}
@@ -71,6 +75,7 @@ type visitor struct {
 	currentStack     []*callgraph.Node
 	visitedNode      map[*callgraph.Node]struct{}
 	result           [][]*callgraph.Node
+	focusFunc        *callgraph.Node
 }
 
 type newVisitorConfig struct {
@@ -93,6 +98,7 @@ func newVisitor(conf *newVisitorConfig) (*visitor, error) {
 func (v *visitor) Visit(edge *callgraph.Edge) error {
 	name := edge.Callee.Func.String()
 	if strings.Contains(name, v.conf.CalleeFunc) {
+		v.focusFunc = edge.Callee
 		v.findRoot(edge.Callee)
 		return errors.New("FoundAndParsed")
 	}
